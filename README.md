@@ -2,7 +2,13 @@
 
 A lightweight web app for translating documents passage-by-passage. Upload PDF, TXT, or DOCX files and translate selected text with context-aware translation.
 
+*Select text directly in a PDF and translate it:*
+
 ![Screenshot](data/screenshot.png)
+
+*Or choose a passage and insert the translation at a specific location:*
+
+![Screenshot](data/screenshot2.png)
 
 ## Features
 
