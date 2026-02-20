@@ -51,6 +51,8 @@ const els = {
   systemPrompt: document.getElementById("systemPrompt"),
   userPrompt: document.getElementById("userPrompt"),
   resetAllSettingsBtn: document.getElementById("resetAllSettingsBtn"),
+  fontIncrease: document.getElementById("fontIncrease"),
+  fontDecrease: document.getElementById("fontDecrease"),
 };
 
 // ============================================================================
@@ -92,6 +94,15 @@ const state = {
 const STORAGE_KEYS = {
   settings: "step-translate-settings",
   panelWidth: "step-translate-panel-width",
+  editorFontSize: "step-translate-editor-font-size",
+};
+
+// Editor font size config
+const FONT_SIZE = {
+  min: 10,
+  max: 28,
+  default: 14,
+  step: 2,
 };
 
 // ============================================================================
@@ -1073,6 +1084,31 @@ function clearTranslation() {
 }
 
 // ============================================================================
+// Editor Font Size
+// ============================================================================
+
+function getEditorFontSize() {
+  const saved = localStorage.getItem(STORAGE_KEYS.editorFontSize);
+  return saved ? parseInt(saved, 10) : FONT_SIZE.default;
+}
+
+function setEditorFontSize(size) {
+  const clamped = Math.max(FONT_SIZE.min, Math.min(FONT_SIZE.max, size));
+  els.translationEditor.style.fontSize = `${clamped}px`;
+  localStorage.setItem(STORAGE_KEYS.editorFontSize, clamped);
+}
+
+function increaseEditorFontSize() {
+  const current = getEditorFontSize();
+  setEditorFontSize(current + FONT_SIZE.step);
+}
+
+function decreaseEditorFontSize() {
+  const current = getEditorFontSize();
+  setEditorFontSize(current - FONT_SIZE.step);
+}
+
+// ============================================================================
 // Translation Upload/Download
 // ============================================================================
 
@@ -1384,6 +1420,9 @@ function setupPdfControls() {
 async function init() {
   await loadSettings();
   
+  // Restore editor font size
+  setEditorFontSize(getEditorFontSize());
+  
   els.fileInput.addEventListener("change", () => {
     const file = els.fileInput.files?.[0];
     if (file) uploadDocument(file);
@@ -1401,6 +1440,10 @@ async function init() {
   els.translateBtn.addEventListener("click", doTranslate);
   els.floatingTranslateBtn.addEventListener("click", doTranslate);
   els.clearBtn.addEventListener("click", clearTranslation);
+  
+  // Font size controls
+  els.fontIncrease.addEventListener("click", increaseEditorFontSize);
+  els.fontDecrease.addEventListener("click", decreaseEditorFontSize);
   
   // Translation upload/download
   els.uploadTranslationBtn.addEventListener("click", () => {
