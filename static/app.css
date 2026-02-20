@@ -118,7 +118,6 @@ select {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
 }
 
 .panel.left {
@@ -203,7 +202,8 @@ select {
   box-sizing: border-box;
   flex-shrink: 0;
   flex-wrap: nowrap;
-  overflow: hidden;
+  position: relative;
+  z-index: 10;
 }
 
 .panel-title {
@@ -217,6 +217,8 @@ select {
   gap: 8px;
   align-items: center;
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
 .font-size-controls {
@@ -331,16 +333,13 @@ select {
 }
 
 .dropdown-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 4px;
+  position: fixed;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(16, 24, 40, 0.12);
   min-width: 180px;
-  z-index: 200;
+  z-index: 1000;
   opacity: 0;
   visibility: hidden;
   transform: translateY(-4px);

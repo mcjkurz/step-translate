@@ -406,8 +406,10 @@ function showInlineLoader() {
     editor.appendChild(loader);
   }
   
-  // Scroll loader into view
-  loader.scrollIntoView({ behavior: "smooth", block: "center" });
+  // Scroll loader into view (only if element has offsetParent, i.e., is visible in layout)
+  if (loader.offsetParent !== null) {
+    loader.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 }
 
 function hideInlineLoader() {
@@ -607,17 +609,23 @@ function renderPassages(container = els.passagesContainer) {
       if (selection && selection.toString().trim()) {
         // User selected partial text - use that instead
         state.selectedText = selection.toString().trim();
-        state.selectedPassageIds = [passage.id];
+        state.selectedPassageIds = []; // Clear passage selection - this is partial text
         highlightPassages(container);
-        updateSelectedText();
+        updateSelectionBadge(0, state.selectedText.length); // Show char count only
         showFloatingTranslateBtn();
         return;
       }
-      // Click without selection - select entire passage
+      // Click without selection - select/deselect entire passage
       // Cmd (Mac) or Ctrl (Windows) for multi-select
       const multiSelect = e.metaKey || e.ctrlKey;
       selectPassage(passage.id, container, multiSelect);
-      showFloatingTranslateBtn();
+      
+      // Show or hide floating button based on selection state
+      if (state.selectedPassageIds.length > 0) {
+        showFloatingTranslateBtn();
+      } else {
+        hideFloatingTranslateBtn();
+      }
     });
     
     container.appendChild(div);
@@ -628,17 +636,24 @@ function selectPassage(passageId, container = els.passagesContainer, multiSelect
   const passage = state.passages.find(p => p.id === passageId);
   if (!passage) return;
   
+  const isAlreadySelected = state.selectedPassageIds.includes(passageId);
+  
   if (multiSelect) {
-    // Toggle selection
-    const idx = state.selectedPassageIds.indexOf(passageId);
-    if (idx >= 0) {
-      state.selectedPassageIds.splice(idx, 1);
+    // Toggle selection in multi-select mode
+    if (isAlreadySelected) {
+      state.selectedPassageIds = state.selectedPassageIds.filter(id => id !== passageId);
     } else {
       state.selectedPassageIds.push(passageId);
     }
   } else {
-    // Single select - replace selection
-    state.selectedPassageIds = [passageId];
+    // Single click behavior:
+    // - If clicking the only selected passage, deselect it
+    // - Otherwise, select only this passage
+    if (isAlreadySelected && state.selectedPassageIds.length === 1) {
+      state.selectedPassageIds = [];
+    } else {
+      state.selectedPassageIds = [passageId];
+    }
   }
   
   highlightPassages(container);
@@ -700,7 +715,8 @@ function highlightPassages(container = els.passagesContainer) {
 // ============================================================================
 
 function showFloatingTranslateBtn() {
-  if (state.selectedPassageIds.length === 0) {
+  // Show if we have selected passages OR selected text
+  if (state.selectedPassageIds.length === 0 && !state.selectedText) {
     hideFloatingTranslateBtn();
     return;
   }
@@ -716,35 +732,153 @@ function hideFloatingTranslateBtn() {
 // Translation
 // ============================================================================
 
+function getEditorTextContent() {
+  // Get plain text from editor, normalizing browser DOM quirks
+  const editor = els.translationEditor;
+  
+  // Clone to manipulate without affecting original
+  const clone = editor.cloneNode(true);
+  
+  // Remove caret marker from clone if present
+  const markerClone = clone.querySelector("#caretMarker");
+  if (markerClone) {
+    markerClone.remove();
+  }
+  
+  // Replace <br> with newlines
+  clone.querySelectorAll("br").forEach(br => {
+    br.replaceWith("\n");
+  });
+  
+  // Replace block elements (div, p) with newlines
+  clone.querySelectorAll("div, p").forEach(block => {
+    if (block.previousSibling) {
+      block.insertAdjacentText("beforebegin", "\n");
+    }
+  });
+  
+  return clone.textContent || "";
+}
+
+function getTextBeforeCaret() {
+  const editor = els.translationEditor;
+  const marker = document.getElementById("caretMarker");
+  
+  if (marker) {
+    // Use marker position - get text from start to marker
+    const range = document.createRange();
+    range.setStart(editor, 0);
+    range.setEndBefore(marker);
+    
+    // Create a temporary container to extract and normalize the text
+    const fragment = range.cloneContents();
+    const temp = document.createElement("div");
+    temp.appendChild(fragment);
+    
+    // Replace <br> with newlines
+    temp.querySelectorAll("br").forEach(br => {
+      br.replaceWith("\n");
+    });
+    
+    // Replace block elements with newlines
+    temp.querySelectorAll("div, p").forEach(block => {
+      if (block.previousSibling) {
+        block.insertAdjacentText("beforebegin", "\n");
+      }
+    });
+    
+    return temp.textContent || "";
+  }
+  
+  // No marker = caret is at end, return full editor text
+  return getEditorTextContent();
+}
+
+function getTextAfterCaret() {
+  const editor = els.translationEditor;
+  const marker = document.getElementById("caretMarker");
+  
+  if (marker) {
+    // Get all text after the marker
+    const range = document.createRange();
+    range.setStartAfter(marker);
+    range.setEnd(editor, editor.childNodes.length);
+    
+    // Create a temporary container to extract and normalize the text
+    const fragment = range.cloneContents();
+    const temp = document.createElement("div");
+    temp.appendChild(fragment);
+    
+    // Replace <br> with newlines
+    temp.querySelectorAll("br").forEach(br => {
+      br.replaceWith("\n");
+    });
+    
+    // Replace block elements with newlines
+    temp.querySelectorAll("div, p").forEach(block => {
+      if (block.previousSibling) {
+        block.insertAdjacentText("beforebegin", "\n");
+      }
+    });
+    
+    return temp.textContent || "";
+  }
+  
+  // No marker = caret is at end, nothing after
+  return "";
+}
+
 function getPriorTranslationsForContext() {
   const maxPassages = state.settings.contextPassages || 0;
   const maxChars = state.settings.contextCharacters || 0;
   
   // Both limits are 0 = no context
-  if ((maxPassages === 0 && maxChars === 0) || state.translationHistory.length === 0) {
+  if (maxPassages === 0 && maxChars === 0) {
     return [];
   }
   
+  // Get text before the insertion point (caret position)
+  const textBeforeCaret = getTextBeforeCaret();
+  
+  
+  if (!textBeforeCaret.trim()) {
+    return [];
+  }
+  
+  // Split into paragraphs - handle various newline patterns
+  // Split on 2+ newlines (with possible whitespace between)
+  const paragraphs = textBeforeCaret
+    .split(/\n\s*\n+/)
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+  
+  
+  if (paragraphs.length === 0) {
+    return [];
+  }
+  
+  // Take the last N paragraphs (closest to caret), respecting limits
   const result = [];
   let totalChars = 0;
   
-  // Work backwards from most recent, respecting both limits
-  for (let i = state.translationHistory.length - 1; i >= 0; i--) {
+  // Work backwards from the paragraph closest to caret
+  for (let i = paragraphs.length - 1; i >= 0; i--) {
     // Check passage limit (if set)
     if (maxPassages > 0 && result.length >= maxPassages) {
       break;
     }
     
-    const h = state.translationHistory[i];
-    const entryChars = (h.original?.length || 0) + (h.translation?.length || 0);
+    const para = paragraphs[i];
+    const paraChars = para.length;
     
     // Check character limit (if set)
-    if (maxChars > 0 && totalChars + entryChars > maxChars && result.length > 0) {
+    if (maxChars > 0 && totalChars + paraChars > maxChars && result.length > 0) {
       break;
     }
     
-    result.unshift({ original: h.original, translation: h.translation });
-    totalChars += entryChars;
+    // Add to beginning to maintain order (oldest first)
+    result.unshift({ translation: para });
+    totalChars += paraChars;
     
     // If character limit is set and we've hit it, stop
     if (maxChars > 0 && totalChars >= maxChars) {
@@ -896,6 +1030,9 @@ function showCaretMarker() {
         node.appendChild(marker);
       }
       state.savedCaretPosition = { marker: true };
+    } else {
+      editor.appendChild(marker);
+      state.savedCaretPosition = { marker: true };
     }
   } catch (e) {
     console.error("Failed to show caret marker:", e);
@@ -940,19 +1077,22 @@ function restoreCaretPosition() {
   return false;
 }
 
-function insertTranslation(text, addTrailingNewline = false) {
+function insertTranslation(text) {
   const editor = els.translationEditor;
   const selection = window.getSelection();
-  
-  // Add trailing newlines if this is a full passage translation
-  const textToInsert = addTrailingNewline ? text + "\n\n" : text;
-  
-  // First, try to restore caret position from marker
   const marker = document.getElementById("caretMarker");
-  if (marker) {
-    const textNode = document.createTextNode(textToInsert);
-    marker.parentNode.insertBefore(textNode, marker);
-    hideCaretMarker();
+  
+  // Insert text exactly where the caret is - no automatic newlines
+  // User is responsible for positioning and spacing
+  
+  // First, try to insert at marker position
+  if (marker && marker.parentNode) {
+    const parent = marker.parentNode;
+    const textNode = document.createTextNode(text);
+    parent.insertBefore(textNode, marker);
+    
+    // Remove marker WITHOUT normalizing (to preserve our textNode reference)
+    marker.remove();
     
     // Position caret after inserted text
     const range = document.createRange();
@@ -960,10 +1100,13 @@ function insertTranslation(text, addTrailingNewline = false) {
     range.collapse(true);
     selection.removeAllRanges();
     selection.addRange(range);
-    
-    // Save position without marker (we're still in editing context)
     saveCaretPosition(false);
     return;
+  }
+  
+  // Remove orphaned marker if it exists but has no parent
+  if (marker) {
+    marker.remove();
   }
   
   // Try current selection in editor
@@ -971,9 +1114,10 @@ function insertTranslation(text, addTrailingNewline = false) {
     const range = selection.getRangeAt(0);
     if (editor.contains(range.commonAncestorContainer) || editor === range.commonAncestorContainer) {
       range.deleteContents();
-      const textNode = document.createTextNode(textToInsert);
+      const textNode = document.createTextNode(text);
       range.insertNode(textNode);
       
+      // Position caret after inserted text
       range.setStartAfter(textNode);
       range.setEndAfter(textNode);
       selection.removeAllRanges();
@@ -983,17 +1127,14 @@ function insertTranslation(text, addTrailingNewline = false) {
     }
   }
   
-  // Append at end with paragraph break
-  if (editor.textContent) {
-    editor.appendChild(document.createTextNode("\n\n" + text + (addTrailingNewline ? "\n\n" : "")));
-  } else {
-    editor.textContent = textToInsert;
-  }
+  // Append at end (fallback)
+  const textNode = document.createTextNode(text);
+  editor.appendChild(textNode);
   
-  // Move cursor to end
+  // Position caret after inserted text
   const range = document.createRange();
-  range.selectNodeContents(editor);
-  range.collapse(false);
+  range.setStartAfter(textNode);
+  range.collapse(true);
   selection.removeAllRanges();
   selection.addRange(range);
   saveCaretPosition(false);
@@ -1017,6 +1158,20 @@ async function doTranslate() {
   
   try {
     const priorTranslations = getPriorTranslationsForContext();
+    
+    // Log context summary to console for debugging
+    if (priorTranslations.length > 0) {
+      const contextSummary = priorTranslations.map((pt, i) => {
+        const t = pt.translation || "";
+        const preview = t.length <= 40 
+          ? t 
+          : `${t.slice(0, 20)}...${t.slice(-20)}`;
+        return `  [${i + 1}] "${preview}"`;
+      }).join("\n");
+      console.log(`[Translate] Context (${priorTranslations.length} entries):\n${contextSummary}`);
+    } else {
+      console.log("[Translate] Context: (none)");
+    }
     
     // Build request with settings (only send non-default values)
     const requestBody = {
@@ -1045,9 +1200,7 @@ async function doTranslate() {
     const data = await resp.json();
     const translation = data.translation.trim();
     
-    // Add trailing newline if full passage(s) were selected (not manual text selection)
-    const isFullPassageSelection = state.selectedPassageIds.length > 0;
-    insertTranslation(translation, isFullPassageSelection);
+    insertTranslation(translation);
     
     state.translationHistory.push({
       original: text,
@@ -1141,6 +1294,13 @@ function toggleDownloadMenu() {
       setStatus("Nothing to download", true);
       return;
     }
+    
+    // Position the menu below the button using fixed positioning
+    const btnRect = els.downloadTranslationBtn.getBoundingClientRect();
+    menu.style.top = `${btnRect.bottom + 4}px`;
+    menu.style.right = `${window.innerWidth - btnRect.right}px`;
+    menu.style.bottom = "auto";
+    
     menu.classList.add("visible");
   }
 }

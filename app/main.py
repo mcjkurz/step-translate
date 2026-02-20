@@ -178,7 +178,6 @@ class UploadResponse(BaseModel):
 
 
 class PriorTranslation(BaseModel):
-    original: str
     translation: str
 
 
@@ -303,12 +302,8 @@ async def translate(req: TranslateRequest) -> TranslateResponse:
     if req.prior_translations:
         user_parts.append(PROMPTS["context_header"])
         for i, pt in enumerate(req.prior_translations[-5:], 1):  # Last 5 translations max
-            orig = _normalize_whitespace(pt.original)[:200]  # Truncate for prompt size
             trans = _normalize_whitespace(pt.translation)[:400]
-            entry = PROMPTS["context_entry"].format(
-                index=i, original=orig, translation=trans
-            )
-            user_parts.append(entry)
+            user_parts.append(f"[{i}] {trans}")
         user_parts.append("")
     
     # Use request override for user prompt or fall back to config
@@ -401,14 +396,17 @@ async def export_translation(req: ExportRequest) -> StreamingResponse:
             bottomMargin=inch,
         )
         
-        # Use qhchina for CJK font support
+        # Use bundled Noto Sans SC TTF font for CJK support
         font_name = "Helvetica"
         try:
-            from qhchina.helpers.fonts import get_font_path, load_fonts
-            load_fonts(verbose=False)
-            font_path = get_font_path("sans")  # Noto Sans CJK
-            pdfmetrics.registerFont(TTFont("NotoSansCJK", font_path))
-            font_name = "NotoSansCJK"
+            font_path = Path(__file__).parent / "fonts" / "NotoSansSC-Regular.ttf"
+            
+            if not font_path.exists():
+                raise FileNotFoundError(f"Font file not found at: {font_path}")
+            
+            pdfmetrics.registerFont(TTFont("NotoSansSC", str(font_path)))
+            font_name = "NotoSansSC"
+            logger.info(f"Loaded CJK font from: {font_path}")
         except Exception as e:
             logger.warning(f"Could not load CJK fonts: {e}, falling back to Helvetica")
         

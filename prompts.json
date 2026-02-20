@@ -7,7 +7,6 @@
     "IMPORTANT: If the previous passages contain translated proper names or abbreviations, make sure that you translate them exactly in the same way."
   ],
   "context_header": "=== PREVIOUSLY TRANSLATED PASSAGES (for context and consistency) ===",
-  "context_entry": "{index}. \"{original}\" → \"{translation}\"",
   "user_prompt": "=== NEW TEXT TO TRANSLATE ===\n{text}",
   "temperature": 0.5
 }
