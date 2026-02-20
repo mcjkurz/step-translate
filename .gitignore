@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Uploads
+uploads/
+
+# Logs
+logs/
+*.log
+
+# Runtime
+.server.pid
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store

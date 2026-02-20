@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Step Translate</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://unpkg.com/pdfjs-dist@4.0.379/web/pdf_viewer.css" crossorigin="anonymous" />
+    <link rel="stylesheet" href="/app.css?v={{CACHE_VERSION}}" />
+    {{SERVER_DEFAULTS}}
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">Step Translate</div>
+        <div class="spacer"></div>
+        <div class="topbar-actions">
+          <label class="select">
+            <span class="select-label">Target</span>
+            <select id="targetLang">
+              <option value="English" selected>English</option>
+              <option value="Chinese (Simplified)">Chinese (中文简体)</option>
+              <option value="Chinese (Traditional)">Chinese (中文繁體)</option>
+              <option value="Spanish">Spanish</option>
+              <option value="French">French</option>
+              <option value="German">German</option>
+              <option value="Japanese">Japanese</option>
+              <option value="Korean">Korean</option>
+              <option value="Russian">Russian</option>
+              <option value="Portuguese">Portuguese</option>
+              <option value="Italian">Italian</option>
+              <option value="Other">Other...</option>
+            </select>
+          </label>
+          <input type="text" id="customLang" class="custom-lang-input" placeholder="Type language..." style="display: none;" />
+          <button id="settingsBtn" class="btn btn-icon" title="Settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="panel left" id="leftPanel">
+          <div class="panel-header">
+            <div class="panel-title">Document</div>
+            <div class="panel-controls pdf-controls" style="display: none;">
+              <button id="zoomOut" class="btn btn-small" title="Zoom out">−</button>
+              <button id="zoomIn" class="btn btn-small" title="Zoom in">+</button>
+              <div class="nav-separator"></div>
+              <button id="prevPage" class="btn btn-small">Prev</button>
+              <span id="pageIndicator" class="page-indicator">0 / 0</span>
+              <button id="nextPage" class="btn btn-small">Next</button>
+            </div>
+            <span id="documentInfo" class="document-info"></span>
+            <span id="selectionBadge" class="selection-badge" style="display: none;"></span>
+            <button id="toggleViewBtn" class="btn btn-small toggle-view-btn" style="display: none;">Show Original</button>
+            <button id="resetDocumentBtn" class="btn btn-small btn-icon" title="Remove document" style="display: none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="panel-body">
+            <div id="documentViewport" class="content-box document-viewport">
+              <div id="dropZone" class="drop-zone">
+                <input id="fileInput" type="file" accept=".pdf,.txt,.text,.docx" class="hidden-file-input" />
+                <div class="drop-zone-content">
+                  <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <p class="drop-text">Click to browse</p>
+                  <p class="drop-subtext">or drag & drop PDF, TXT, or DOCX</p>
+                </div>
+              </div>
+              <!-- PDF Viewer (for PDFs) -->
+              <div id="pdfViewerContainer" class="pdf-viewer-container" style="display: none;"></div>
+              <!-- Text Passages (for TXT/DOCX) -->
+              <div id="passagesContainer" class="passages-container"></div>
+            </div>
+          </div>
+        </section>
+
+        <div class="resizer" id="resizer">
+          <!-- Floating translate button (appears when passage is selected) -->
+          <button id="floatingTranslateBtn" class="floating-translate-btn" style="display: none;">
+            Translate
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <section class="panel right" id="rightPanel">
+          <div class="panel-header">
+            <div class="panel-title">Translation</div>
+            <div class="panel-controls">
+              <button id="selectPassageBtn" class="btn" title="Expand selection to full passage" style="display: none;">Select Passage</button>
+              <button id="translateBtn" class="btn primary" title="Translate selected text">Translate</button>
+              <button id="uploadTranslationBtn" class="btn btn-icon" title="Upload existing translation">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <div class="dropdown" id="downloadDropdown">
+                <button id="downloadTranslationBtn" class="btn btn-icon" title="Download translation">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 4v12m0 0l4-4m-4 4l-4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <div class="dropdown-menu" id="downloadMenu">
+                  <button class="dropdown-item" data-format="txt">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Plain Text (.txt)
+                  </button>
+                  <button class="dropdown-item" data-format="docx">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M14 2v6h6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Word Document (.docx)
+                  </button>
+                  <button class="dropdown-item" data-format="pdf">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M14 2v6h6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    PDF Document (.pdf)
+                  </button>
+                </div>
+              </div>
+              <button id="clearBtn" class="btn btn-icon" title="Clear translation">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="panel-body">
+            <input id="translationFileInput" type="file" accept=".txt,.text" class="hidden-file-input" />
+            <div id="translationEditor" class="content-box translation-editor" contenteditable="true" placeholder="Translated text will appear here. You can also drag & drop a .txt file to load existing translation."></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-overlay" style="display: none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button id="closeSettingsBtn" class="btn btn-icon btn-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="apiKey">API Key</label>
+            <input type="password" id="apiKey" class="form-input" placeholder="sk-..." />
+            <span class="form-hint">Your OpenAI or compatible API key. Leave empty to use server's API_KEY from .env</span>
+          </div>
+          <div class="form-group">
+            <label for="apiEndpoint">API Endpoint</label>
+            <input type="text" id="apiEndpoint" class="form-input" placeholder="https://api.openai.com/v1" />
+            <span class="form-hint">Leave empty to use server default (from .env API_ENDPOINT)</span>
+          </div>
+          <div class="form-group">
+            <label for="modelName">Model</label>
+            <input type="text" id="modelName" class="form-input" placeholder="gpt-4o-mini" />
+            <span class="form-hint">Leave empty to use server default (from .env MODEL)</span>
+          </div>
+          <div class="form-group">
+            <label>Context Limits</label>
+            <div class="dual-input-row">
+              <div class="dual-input-field">
+                <input type="number" id="contextPassages" class="form-input" min="0" value="3" />
+                <span class="input-suffix">passages</span>
+              </div>
+              <div class="dual-input-field">
+                <input type="number" id="contextCharacters" class="form-input" min="0" value="0" />
+                <span class="input-suffix">characters</span>
+              </div>
+            </div>
+            <span class="form-hint">Prior translations included as context. Set 0 to ignore a limit. If both are set, whichever is reached first applies.</span>
+          </div>
+          <div class="form-group">
+            <label for="temperature">Temperature</label>
+            <input type="number" id="temperature" class="form-input" min="0" max="2" step="0.1" />
+            <span class="form-hint">Controls randomness (0 = deterministic, higher = more creative)</span>
+          </div>
+          <details class="form-group collapsible" open>
+            <summary>Prompt Templates</summary>
+            <div class="collapsible-content">
+              <div class="form-group">
+                <label for="systemPrompt">System Prompt</label>
+                <textarea id="systemPrompt" class="form-textarea" rows="8"></textarea>
+                <span class="form-hint">Use {target_language} as placeholder. One instruction per line.</span>
+              </div>
+              <div class="form-group">
+                <label for="userPrompt">User Prompt</label>
+                <textarea id="userPrompt" class="form-textarea" rows="3"></textarea>
+                <span class="form-hint">Use {text} as placeholder for the text to translate.</span>
+              </div>
+            </div>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="resetAllSettingsBtn" class="btn">Reset All to Defaults</button>
+          <button id="saveSettingsBtn" class="btn primary">Save Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script type="module" src="/app.js?v={{CACHE_VERSION}}"></script>
+  </body>
+</html>
