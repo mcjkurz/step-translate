@@ -1036,30 +1036,34 @@ function isCaretOnEmptyLine(marker) {
   return prevEndsWithNewline && currentLineIsEmpty;
 }
 
-function isCaretAtEndOfContent(marker) {
-  // Check if the caret is at the end of the content (nothing meaningful after it)
-  // Walk through all siblings after the marker and check for meaningful content
-  let sibling = marker.nextSibling;
+function isCaretAtEndOfLine(marker) {
+  // Check if the caret is at the end of the CURRENT LINE
+  // This means: nothing on this line after the caret (but there might be content on next lines)
+  // We want to show the trail effect if the rest of the current line is empty
   
-  while (sibling) {
-    if (sibling.nodeType === Node.TEXT_NODE) {
-      // Check if text node has any non-whitespace content
-      // (but allow trailing newlines - those count as "end of content")
-      const text = sibling.textContent;
-      if (text && text.replace(/[\s\n\r]/g, "").length > 0) {
-        return false; // There's real content after
-      }
-    } else if (sibling.nodeType === Node.ELEMENT_NODE) {
-      // Skip BR elements (they're line breaks, not content)
-      // Skip the caret marker itself if somehow encountered
-      if (sibling.nodeName !== "BR" && sibling.id !== "caretMarker") {
-        return false; // There's an element after
-      }
+  const next = marker.nextSibling;
+  
+  // No next sibling = at end of all content = end of line
+  if (!next) return true;
+  
+  // Check immediate next sibling
+  if (next.nodeType === Node.TEXT_NODE) {
+    const text = next.textContent;
+    // If next text is empty or starts with newline, we're at end of line
+    if (!text || text === "" || text.startsWith("\n")) {
+      return true;
     }
-    sibling = sibling.nextSibling;
+    // If there's non-newline content immediately after, we're not at end of line
+    return false;
   }
   
-  return true; // Nothing meaningful after the marker
+  // If next is a BR, we're at end of line
+  if (next.nodeName === "BR") {
+    return true;
+  }
+  
+  // For other elements, assume we're not at end of line
+  return false;
 }
 
 function applyCaretTrailEffect(marker) {
@@ -1135,7 +1139,7 @@ function showCaretMarker() {
     // Check if caret is on an empty line and add class accordingly
     if (isCaretOnEmptyLine(marker)) {
       marker.classList.add("empty-line");
-    } else if (isCaretAtEndOfContent(marker)) {
+    } else if (isCaretAtEndOfLine(marker)) {
       // Caret is at end of content but not on empty line - show trail effect
       applyCaretTrailEffect(marker);
     }
@@ -1148,7 +1152,7 @@ function showCaretMarker() {
     // Check empty line for fallback case too
     if (isCaretOnEmptyLine(marker)) {
       marker.classList.add("empty-line");
-    } else if (isCaretAtEndOfContent(marker)) {
+    } else if (isCaretAtEndOfLine(marker)) {
       applyCaretTrailEffect(marker);
     }
   }

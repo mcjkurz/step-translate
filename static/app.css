@@ -706,13 +706,13 @@ select {
 /* Caret marker - shows insertion point when editor loses focus */
 .caret-marker {
   display: inline-block;
-  width: 2px;
+  width: 0.6em;
   height: 1.2em;
   background: #dc2626;
-  margin: 0 1px;
+  margin: 0;
   vertical-align: text-bottom;
   animation: caret-blink 1s step-end infinite;
-  border-radius: 1px;
+  border-radius: 2px;
   position: relative;
 }
 
@@ -727,11 +727,11 @@ select {
   animation: caret-line-blink 1s step-end infinite;
 }
 
-/* Caret marker at end of content - extend highlight to right edge */
+/* Caret marker at end of line - extend highlight to right edge */
 .caret-marker.end-of-content::after {
   content: "";
   position: absolute;
-  left: 2px;
+  left: 0.6em;
   top: 0;
   width: var(--caret-trail-width, 100px);
   height: 1.4em;
