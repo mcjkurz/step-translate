@@ -732,6 +732,12 @@ function hideFloatingTranslateBtn() {
 // Translation
 // ============================================================================
 
+function isEditorEffectivelyEmpty() {
+  // Check if editor has no meaningful content (ignoring caret marker)
+  const text = getEditorTextContent();
+  return !text.trim();
+}
+
 function getEditorTextContent() {
   // Get plain text from editor, normalizing browser DOM quirks
   const editor = els.translationEditor;
@@ -989,6 +995,97 @@ function saveCaretPosition(showMarker = false) {
   if (showMarker) showCaretMarker();
 }
 
+function isCaretOnEmptyLine(marker) {
+  // Check if the caret marker is at the START of an empty line
+  // Cases:
+  // 1. Editor is completely empty
+  // 2. Caret is after a newline and before another newline (or end with nothing on current line)
+  
+  const prev = marker.previousSibling;
+  const next = marker.nextSibling;
+  
+  // Get text content before caret (from immediate previous sibling)
+  let prevText = "";
+  if (prev && prev.nodeType === Node.TEXT_NODE) {
+    prevText = prev.textContent;
+  }
+  
+  // Get text content after caret (from immediate next sibling)  
+  let nextText = "";
+  if (next && next.nodeType === Node.TEXT_NODE) {
+    nextText = next.textContent;
+  }
+  
+  // Case 1: Editor is empty (no prev, no next, or both are empty)
+  const editorIsEmpty = (!prev && !next) || 
+    ((!prev || prevText === "") && (!next || nextText === ""));
+  if (editorIsEmpty) return true;
+  
+  // Case 2: Previous ends with newline AND current line is empty
+  // Current line is empty if: next starts with newline, or next is empty/null
+  const prevEndsWithNewline = prevText.endsWith("\n") || prev?.nodeName === "BR";
+  const currentLineIsEmpty = !next || 
+    nextText === "" || 
+    nextText.startsWith("\n") || 
+    next?.nodeName === "BR";
+  
+  // But we need to distinguish "after newline at end" from "after text at end"
+  // If prev ends with \n and next is empty, we're on an empty line
+  // If prev ends with text (no \n) and next is empty, we're at end of content (not empty line)
+  
+  return prevEndsWithNewline && currentLineIsEmpty;
+}
+
+function isCaretAtEndOfContent(marker) {
+  // Check if the caret is at the end of the content (nothing meaningful after it)
+  // Walk through all siblings after the marker and check for meaningful content
+  let sibling = marker.nextSibling;
+  
+  while (sibling) {
+    if (sibling.nodeType === Node.TEXT_NODE) {
+      // Check if text node has any non-whitespace content
+      // (but allow trailing newlines - those count as "end of content")
+      const text = sibling.textContent;
+      if (text && text.replace(/[\s\n\r]/g, "").length > 0) {
+        return false; // There's real content after
+      }
+    } else if (sibling.nodeType === Node.ELEMENT_NODE) {
+      // Skip BR elements (they're line breaks, not content)
+      // Skip the caret marker itself if somehow encountered
+      if (sibling.nodeName !== "BR" && sibling.id !== "caretMarker") {
+        return false; // There's an element after
+      }
+    }
+    sibling = sibling.nextSibling;
+  }
+  
+  return true; // Nothing meaningful after the marker
+}
+
+function applyCaretTrailEffect(marker) {
+  // Use requestAnimationFrame to ensure marker is rendered before measuring
+  requestAnimationFrame(() => {
+    // Verify marker still exists (might have been removed)
+    if (!marker.parentNode) return;
+    
+    const editor = els.translationEditor;
+    const markerRect = marker.getBoundingClientRect();
+    const editorRect = editor.getBoundingClientRect();
+    
+    // Get the editor's padding-right
+    const editorStyle = window.getComputedStyle(editor);
+    const paddingRight = parseFloat(editorStyle.paddingRight) || 0;
+    
+    // Calculate remaining width (editor right edge - padding - caret position)
+    const remainingWidth = editorRect.right - paddingRight - markerRect.right;
+    
+    if (remainingWidth > 10) { // Only show if there's meaningful space
+      marker.classList.add("end-of-content");
+      marker.style.setProperty("--caret-trail-width", `${remainingWidth}px`);
+    }
+  });
+}
+
 function showCaretMarker() {
   // Remove existing marker
   hideCaretMarker();
@@ -1034,11 +1131,26 @@ function showCaretMarker() {
       editor.appendChild(marker);
       state.savedCaretPosition = { marker: true };
     }
+    
+    // Check if caret is on an empty line and add class accordingly
+    if (isCaretOnEmptyLine(marker)) {
+      marker.classList.add("empty-line");
+    } else if (isCaretAtEndOfContent(marker)) {
+      // Caret is at end of content but not on empty line - show trail effect
+      applyCaretTrailEffect(marker);
+    }
   } catch (e) {
     console.error("Failed to show caret marker:", e);
     // Fall back to appending at end
     editor.appendChild(marker);
     state.savedCaretPosition = { marker: true };
+    
+    // Check empty line for fallback case too
+    if (isCaretOnEmptyLine(marker)) {
+      marker.classList.add("empty-line");
+    } else if (isCaretAtEndOfContent(marker)) {
+      applyCaretTrailEffect(marker);
+    }
   }
 }
 
@@ -1681,9 +1793,22 @@ async function init() {
     document.execCommand("insertText", false, text);
   });
   
-  // When clicking in editor, hide marker (user is actively editing)
+  // When clicking in editor, hide marker and placeholder (user is actively editing)
   els.translationEditor.addEventListener("focus", () => {
     hideCaretMarker();
+    els.translationEditor.classList.add("hide-placeholder");
+    els.translationEditor.classList.remove("show-placeholder");
+  });
+  
+  // When leaving editor, show placeholder if empty
+  els.translationEditor.addEventListener("blur", () => {
+    els.translationEditor.classList.remove("hide-placeholder");
+    // Show placeholder if editor is effectively empty
+    if (isEditorEffectivelyEmpty()) {
+      els.translationEditor.classList.add("show-placeholder");
+    } else {
+      els.translationEditor.classList.remove("show-placeholder");
+    }
   });
   
   // When clicking anywhere on right panel, hide floating translate button

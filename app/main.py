@@ -4,8 +4,10 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from docx import Document
@@ -94,23 +96,33 @@ ENV_API_ENDPOINT = _get_env("API_ENDPOINT", "https://api.openai.com/v1")
 ENV_MODEL = _get_env("MODEL", "gpt-4o-mini")
 MAX_UPLOAD_MB = _get_env_int("MAX_UPLOAD_MB", 50)
 MAX_FILE_SIZE = MAX_UPLOAD_MB * 1024 * 1024
-CLEANUP_UPLOADS_DAYS = _get_env_int("CLEANUP_UPLOADS_DAYS", 7)
 CLEANUP_LOGS_DAYS = _get_env_int("CLEANUP_LOGS_DAYS", 30)
 
 
 # ============================================================================
-# Startup Cleanup
+# Cleanup Functions
 # ============================================================================
 
-def _cleanup_old_files(directory: Path, max_age_days: int, description: str) -> None:
-    """Delete files older than max_age_days from directory."""
-    if max_age_days <= 0 or not directory.exists():
+def _clear_uploads() -> None:
+    """Remove all files from uploads directory."""
+    if not UPLOADS_DIR.exists():
+        return
+    count = sum(1 for f in UPLOADS_DIR.iterdir() if f.is_file())
+    if count > 0:
+        shutil.rmtree(UPLOADS_DIR)
+        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Cleared {count} uploaded file(s)")
+
+
+def _cleanup_old_logs() -> None:
+    """Delete log files older than CLEANUP_LOGS_DAYS."""
+    if CLEANUP_LOGS_DAYS <= 0 or not LOGS_DIR.exists():
         return
     
-    cutoff = time.time() - (max_age_days * 24 * 60 * 60)
+    cutoff = time.time() - (CLEANUP_LOGS_DAYS * 24 * 60 * 60)
     deleted = 0
     
-    for file_path in directory.iterdir():
+    for file_path in LOGS_DIR.iterdir():
         if file_path.is_file():
             try:
                 if file_path.stat().st_mtime < cutoff:
@@ -120,17 +132,18 @@ def _cleanup_old_files(directory: Path, max_age_days: int, description: str) -> 
                 pass
     
     if deleted > 0:
-        logger.info(f"Cleanup: deleted {deleted} {description} older than {max_age_days} days")
+        logger.info(f"Cleaned {deleted} log file(s) older than {CLEANUP_LOGS_DAYS} days")
 
 
-def startup_cleanup() -> None:
-    """Run cleanup tasks on application startup."""
-    _cleanup_old_files(UPLOADS_DIR, CLEANUP_UPLOADS_DAYS, "uploaded files")
-    _cleanup_old_files(LOGS_DIR, CLEANUP_LOGS_DAYS, "log files")
-
-
-# Run cleanup on module load (server startup)
-startup_cleanup()
+@asynccontextmanager
+async def lifespan(app):
+    """Handle startup and shutdown cleanup."""
+    logger.info("Starting up...")
+    _clear_uploads()
+    _cleanup_old_logs()
+    yield
+    logger.info("Shutting down...")
+    _clear_uploads()
 
 
 def _normalize_whitespace(s: str) -> str:
@@ -155,7 +168,7 @@ def _target_language_label(lang: str) -> str:
     return lang_norm
 
 
-app = FastAPI(title="Step Translate")
+app = FastAPI(title="Step Translate", lifespan=lifespan)
 
 
 # ============================================================================
