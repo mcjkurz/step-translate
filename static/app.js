@@ -53,6 +53,20 @@ const els = {
   resetAllSettingsBtn: document.getElementById("resetAllSettingsBtn"),
   fontIncrease: document.getElementById("fontIncrease"),
   fontDecrease: document.getElementById("fontDecrease"),
+  docFontIncrease: document.getElementById("docFontIncrease"),
+  docFontDecrease: document.getElementById("docFontDecrease"),
+  // Adapt modal elements
+  floatingAdaptBtn: document.getElementById("floatingAdaptBtn"),
+  adaptModal: document.getElementById("adaptModal"),
+  adaptBtn: document.getElementById("adaptBtn"),
+  adaptInstructions: document.getElementById("adaptInstructions"),
+  adaptModel: document.getElementById("adaptModel"),
+  adaptAcceptBtn: document.getElementById("adaptAcceptBtn"),
+  adaptCloseBtn: document.getElementById("adaptCloseBtn"),
+  adaptOriginalText: document.getElementById("adaptOriginalText"),
+  adaptResultText: document.getElementById("adaptResultText"),
+  adaptSystemPrompt: document.getElementById("adaptSystemPrompt"),
+  adaptUserPrompt: document.getElementById("adaptUserPrompt"),
 };
 
 // ============================================================================
@@ -76,6 +90,8 @@ const state = {
     temperature: null,  // Loaded from server prompts.json
     systemPrompt: "",
     userPrompt: "",
+    adaptSystemPrompt: "",
+    adaptUserPrompt: "",
   },
   serverSettings: null, // Loaded from window.SERVER_DEFAULTS (injected by server)
   // PDF view state
@@ -88,6 +104,10 @@ const state = {
   linkService: null,
   // Caret position tracking
   savedCaretPosition: null, // { node, offset } - saved when focus leaves editor
+  // Adapt feature state
+  isAdapting: false,
+  adaptSelectedText: "", // Text selected in translation editor for adaptation
+  adaptSelectionRange: null, // Saved range for replacing text after Accept
 };
 
 // Storage keys
@@ -95,13 +115,15 @@ const STORAGE_KEYS = {
   settings: "step-translate-settings",
   panelWidth: "step-translate-panel-width",
   editorFontSize: "step-translate-editor-font-size",
+  docFontSize: "step-translate-doc-font-size",
 };
 
-// Editor font size config
+// Font size config
 const FONT_SIZE = {
   min: 10,
   max: 28,
   default: 14,
+  docDefault: 16,
   step: 2,
 };
 
@@ -273,6 +295,10 @@ function updateSettingsForm() {
   // Prompts: show user value if set, otherwise show server default as actual value
   els.systemPrompt.value = state.settings.systemPrompt || server.systemPrompt || "";
   els.userPrompt.value = state.settings.userPrompt || server.userPrompt || "";
+  
+  // Adapt prompts
+  els.adaptSystemPrompt.value = state.settings.adaptSystemPrompt || server.adaptSystemPrompt || "";
+  els.adaptUserPrompt.value = state.settings.adaptUserPrompt || server.adaptUserPrompt || "";
 }
 
 function saveSettings() {
@@ -288,6 +314,8 @@ function saveSettings() {
     temperature: parseFloat(els.temperature.value) ?? defaultTemp,
     systemPrompt: els.systemPrompt.value.trim(),
     userPrompt: els.userPrompt.value.trim(),
+    adaptSystemPrompt: els.adaptSystemPrompt.value.trim(),
+    adaptUserPrompt: els.adaptUserPrompt.value.trim(),
   };
   
   try {
@@ -314,6 +342,8 @@ function resetAllSettings() {
     temperature: null,
     systemPrompt: "",
     userPrompt: "",
+    adaptSystemPrompt: "",
+    adaptUserPrompt: "",
   };
   
   // Refresh form with server defaults
@@ -1353,6 +1383,186 @@ function clearTranslation() {
 }
 
 // ============================================================================
+// Adapt Feature
+// ============================================================================
+
+function showFloatingAdaptBtn() {
+  const selection = window.getSelection();
+  if (!selection || !selection.toString().trim()) {
+    hideFloatingAdaptBtn();
+    return;
+  }
+  
+  // Only show if selection is within the translation editor
+  const range = selection.getRangeAt(0);
+  if (!els.translationEditor.contains(range.commonAncestorContainer)) {
+    hideFloatingAdaptBtn();
+    return;
+  }
+  
+  // Position the button near the selection
+  const rect = range.getBoundingClientRect();
+  const btn = els.floatingAdaptBtn;
+  
+  btn.style.position = "fixed";
+  btn.style.left = `${rect.left + rect.width / 2}px`;
+  btn.style.top = `${rect.top - 36}px`;
+  btn.style.transform = "translateX(-50%)";
+  btn.style.display = "flex";
+}
+
+function hideFloatingAdaptBtn() {
+  els.floatingAdaptBtn.style.display = "none";
+}
+
+function openAdaptPanel(selectedText) {
+  state.adaptSelectedText = selectedText;
+  
+  // Save the selection range so Accept can replace it later
+  const selection = window.getSelection();
+  if (selection && selection.rangeCount > 0) {
+    state.adaptSelectionRange = selection.getRangeAt(0).cloneRange();
+  }
+  
+  // Populate the modal
+  els.adaptOriginalText.textContent = selectedText;
+  els.adaptResultText.textContent = "";
+  els.adaptAcceptBtn.style.display = "none";
+  
+  // Reset button styles
+  els.adaptBtn.textContent = "Adapt";
+  els.adaptBtn.classList.remove("danger");
+  els.adaptBtn.classList.add("primary");
+  els.adaptAcceptBtn.classList.remove("success");
+  els.adaptAcceptBtn.classList.add("primary");
+  
+  // Show the modal overlay
+  els.adaptModal.style.display = "flex";
+  
+  // Hide floating button
+  hideFloatingAdaptBtn();
+}
+
+function closeAdaptPanel() {
+  els.adaptModal.style.display = "none";
+  state.adaptSelectedText = "";
+  state.adaptSelectionRange = null;
+  state.isAdapting = false;
+  els.adaptOriginalText.textContent = "";
+  els.adaptResultText.textContent = "";
+  els.adaptAcceptBtn.style.display = "none";
+}
+
+function setAdapting(isAdapting) {
+  state.isAdapting = isAdapting;
+  els.adaptBtn.disabled = isAdapting;
+  
+  if (isAdapting) {
+    els.adaptResultText.innerHTML = '<span class="inline-loader"><span class="loader-spinner"></span></span>';
+  }
+}
+
+async function doAdapt() {
+  const text = state.adaptSelectedText;
+  if (!text) {
+    showToast("No text selected to adapt.", true);
+    return;
+  }
+  
+  if (!hasApiKey()) {
+    showToast("Please configure your API key in Settings or set API_KEY in .env", true);
+    openSettingsModal();
+    return;
+  }
+  
+  setAdapting(true);
+  
+  try {
+    const requestBody = {
+      selected_text: text,
+      target_language: getTargetLanguage(),
+      additional_instructions: els.adaptInstructions.value.trim() || undefined,
+      api_key: state.settings.apiKey || undefined,
+      api_endpoint: state.settings.apiEndpoint || undefined,
+      model: els.adaptModel.value.trim() || state.settings.model || undefined,
+      temperature: state.settings.temperature ?? undefined,
+      adapt_system_prompt: state.settings.adaptSystemPrompt || undefined,
+      adapt_user_prompt: state.settings.adaptUserPrompt || undefined,
+    };
+    
+    const resp = await fetch("/api/adapt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || "Adaptation failed");
+    }
+    
+    const data = await resp.json();
+    const adaptedText = data.adapted_text.trim();
+    
+    els.adaptResultText.textContent = adaptedText;
+    els.adaptAcceptBtn.style.display = "inline-flex";
+    
+    // Switch Adapt button to "Try Again" style
+    els.adaptBtn.textContent = "Try Again";
+    els.adaptBtn.classList.remove("primary");
+    els.adaptBtn.classList.add("danger");
+    els.adaptAcceptBtn.classList.remove("primary");
+    els.adaptAcceptBtn.classList.add("success");
+    
+  } catch (e) {
+    showToast(e.message || "Adaptation failed", true);
+    els.adaptResultText.textContent = "";
+  } finally {
+    setAdapting(false);
+  }
+}
+
+function acceptAdaptation() {
+  const adaptedText = els.adaptResultText.textContent.trim();
+  if (!adaptedText) {
+    showToast("No adapted text to accept.", true);
+    return;
+  }
+  
+  const editor = els.translationEditor;
+  
+  if (state.adaptSelectionRange) {
+    try {
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(state.adaptSelectionRange);
+      
+      state.adaptSelectionRange.deleteContents();
+      const textNode = document.createTextNode(adaptedText);
+      state.adaptSelectionRange.insertNode(textNode);
+      
+      // Position caret after inserted text
+      const range = document.createRange();
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      
+      editor.normalize();
+    } catch (e) {
+      console.error("Failed to replace selection:", e);
+      showToast("Failed to replace text. Please copy the adapted text manually.", true);
+      return;
+    }
+  } else {
+    showToast("Could not locate original selection. Please copy the adapted text manually.", true);
+    return;
+  }
+  
+  closeAdaptPanel();
+}
+
+// ============================================================================
 // Editor Font Size
 // ============================================================================
 
@@ -1375,6 +1585,29 @@ function increaseEditorFontSize() {
 function decreaseEditorFontSize() {
   const current = getEditorFontSize();
   setEditorFontSize(current - FONT_SIZE.step);
+}
+
+// ============================================================================
+// Document Font Size
+// ============================================================================
+
+function getDocFontSize() {
+  const saved = localStorage.getItem(STORAGE_KEYS.docFontSize);
+  return saved ? parseInt(saved, 10) : FONT_SIZE.docDefault;
+}
+
+function setDocFontSize(size) {
+  const clamped = Math.max(FONT_SIZE.min, Math.min(FONT_SIZE.max, size));
+  els.passagesContainer.style.fontSize = `${clamped}px`;
+  localStorage.setItem(STORAGE_KEYS.docFontSize, clamped);
+}
+
+function increaseDocFontSize() {
+  setDocFontSize(getDocFontSize() + FONT_SIZE.step);
+}
+
+function decreaseDocFontSize() {
+  setDocFontSize(getDocFontSize() - FONT_SIZE.step);
 }
 
 // ============================================================================
@@ -1696,8 +1929,9 @@ function setupPdfControls() {
 async function init() {
   await loadSettings();
   
-  // Restore editor font size
+  // Restore font sizes
   setEditorFontSize(getEditorFontSize());
+  setDocFontSize(getDocFontSize());
   
   els.fileInput.addEventListener("change", () => {
     const file = els.fileInput.files?.[0];
@@ -1717,9 +1951,67 @@ async function init() {
   els.floatingTranslateBtn.addEventListener("click", doTranslate);
   els.clearBtn.addEventListener("click", clearTranslation);
   
-  // Font size controls
+  // Font size controls (translation editor)
   els.fontIncrease.addEventListener("click", increaseEditorFontSize);
   els.fontDecrease.addEventListener("click", decreaseEditorFontSize);
+  
+  // Font size controls (document panel)
+  els.docFontIncrease.addEventListener("click", increaseDocFontSize);
+  els.docFontDecrease.addEventListener("click", decreaseDocFontSize);
+  
+  // Adapt feature
+  // Prevent the floating button from stealing focus (which clears the text selection)
+  els.floatingAdaptBtn.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  els.floatingAdaptBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim()) {
+      openAdaptPanel(selection.toString().trim());
+    }
+  });
+  els.adaptBtn.addEventListener("click", doAdapt);
+  els.adaptAcceptBtn.addEventListener("click", acceptAdaptation);
+  els.adaptCloseBtn.addEventListener("click", closeAdaptPanel);
+  
+  // Detect text selection in translation editor to show floating Adapt button
+  els.translationEditor.addEventListener("mouseup", () => {
+    // Small delay to let the selection finalize
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (selection && selection.toString().trim() && 
+          els.translationEditor.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+        showFloatingAdaptBtn();
+      } else {
+        hideFloatingAdaptBtn();
+      }
+    }, 10);
+  });
+  
+  // Also handle keyboard selection (Shift+Arrow, Ctrl+A, etc.)
+  els.translationEditor.addEventListener("keyup", (e) => {
+    if (e.shiftKey || e.key === "a" && (e.ctrlKey || e.metaKey)) {
+      setTimeout(() => {
+        const selection = window.getSelection();
+        if (selection && selection.toString().trim() &&
+            els.translationEditor.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+          showFloatingAdaptBtn();
+        } else {
+          hideFloatingAdaptBtn();
+        }
+      }, 10);
+    }
+  });
+  
+  // Hide floating adapt button when clicking outside the editor
+  document.addEventListener("mousedown", (e) => {
+    if (!els.floatingAdaptBtn.contains(e.target) && !els.translationEditor.contains(e.target)) {
+      hideFloatingAdaptBtn();
+    }
+  });
   
   // Translation upload/download
   els.uploadTranslationBtn.addEventListener("click", () => {
@@ -1779,9 +2071,16 @@ async function init() {
     }
   });
   
+  // Adapt modal: do NOT close on overlay click (user needs to select/copy text inside)
+  // Only close via the × button or Escape key
+  
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && els.settingsModal.style.display !== "none") {
-      closeSettingsModal();
+    if (e.key === "Escape") {
+      if (els.adaptModal.style.display !== "none") {
+        closeAdaptPanel();
+      } else if (els.settingsModal.style.display !== "none") {
+        closeSettingsModal();
+      }
     }
   });
   
@@ -1792,6 +2091,13 @@ async function init() {
   
   // Strip formatting when pasting - keep only plain text
   els.translationEditor.addEventListener("paste", (e) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
+  });
+  
+  // Strip formatting for adapt result field too
+  els.adaptResultText.addEventListener("paste", (e) => {
     e.preventDefault();
     const text = e.clipboardData.getData("text/plain");
     document.execCommand("insertText", false, text);

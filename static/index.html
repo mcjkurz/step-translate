@@ -57,6 +57,18 @@
             <span id="documentInfo" class="document-info"></span>
             <span id="selectionBadge" class="selection-badge" style="display: none;"></span>
             <button id="toggleViewBtn" class="btn btn-small toggle-view-btn" style="display: none;">Show Original</button>
+            <div class="font-size-controls">
+              <button id="docFontDecrease" class="btn btn-icon" title="Decrease font size">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button id="docFontIncrease" class="btn btn-icon" title="Increase font size">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14M5 12h14" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
             <button id="resetDocumentBtn" class="btn btn-small btn-icon" title="Remove document" style="display: none;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
@@ -218,6 +230,16 @@
                 <textarea id="userPrompt" class="form-textarea" rows="3"></textarea>
                 <span class="form-hint">Use {text} as placeholder for the text to translate.</span>
               </div>
+              <div class="form-group">
+                <label for="adaptSystemPrompt">Adapt System Prompt</label>
+                <textarea id="adaptSystemPrompt" class="form-textarea" rows="6"></textarea>
+                <span class="form-hint">Use {target_language} as placeholder. Prompt for making translations sound more natural.</span>
+              </div>
+              <div class="form-group">
+                <label for="adaptUserPrompt">Adapt User Prompt</label>
+                <textarea id="adaptUserPrompt" class="form-textarea" rows="3"></textarea>
+                <span class="form-hint">Use {text} as placeholder for the text to adapt.</span>
+              </div>
             </div>
           </details>
         </div>
@@ -227,6 +249,53 @@
         </div>
       </div>
     </div>
+
+    <!-- Adapt Modal -->
+    <div id="adaptModal" class="modal-overlay" style="display: none;">
+      <div class="modal adapt-modal">
+        <div class="modal-header">
+          <h2>Adapt</h2>
+          <button id="adaptCloseBtn" class="btn btn-icon btn-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="adapt-options-row">
+            <div class="form-group adapt-instructions-field">
+              <label for="adaptInstructions">Additional Instructions</label>
+              <input type="text" id="adaptInstructions" class="form-input" placeholder="e.g. make it more formal, simplify vocabulary..." />
+            </div>
+            <div class="form-group adapt-model-field">
+              <label for="adaptModel">Model</label>
+              <input type="text" id="adaptModel" class="form-input" placeholder="default" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Selected Translation</label>
+            <div id="adaptOriginalText" class="adapt-text-display"></div>
+          </div>
+          <div class="form-group">
+            <label>Adapted Text</label>
+            <div id="adaptResultText" class="adapt-text-display adapt-result" contenteditable="true" placeholder="Adapted text will appear here..."></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="adaptBtn" class="btn primary">Adapt</button>
+          <button id="adaptAcceptBtn" class="btn primary" style="display: none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;">
+              <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Accept
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Adapt button (appears when text is selected in translation editor) -->
+    <button id="floatingAdaptBtn" class="floating-adapt-btn" style="display: none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Adapt
+    </button>
 
     <!-- Toast notifications -->
     <div id="toastContainer" class="toast-container"></div>

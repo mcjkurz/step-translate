@@ -310,6 +310,26 @@ select {
   background: var(--primary-hover);
 }
 
+.btn.danger {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+}
+
+.btn.danger:hover {
+  background: rgba(220, 38, 38, 0.14);
+}
+
+.btn.success {
+  border-color: rgba(22, 163, 74, 0.35);
+  background: rgba(22, 163, 74, 0.08);
+  color: #15803d;
+}
+
+.btn.success:hover {
+  background: rgba(22, 163, 74, 0.14);
+}
+
 .btn-icon {
   padding: 8px;
   display: flex;
@@ -475,6 +495,7 @@ select {
   overflow-y: auto;
   background: #f0f0f0;
   padding: 24px;
+  font-size: 16px;
 }
 
 .passages-container.visible {
@@ -493,7 +514,7 @@ select {
   cursor: pointer;
   transition: background 0.15s ease, border-left-color 0.15s ease;
   line-height: 1.7;
-  font-size: 15px;
+  font-size: inherit;
   background: white;
   border-left: 3px solid transparent;
   user-select: text;
@@ -749,6 +770,95 @@ select {
 @keyframes caret-line-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* ============================================================================
+   Adapt Modal
+   ============================================================================ */
+
+.adapt-modal {
+  max-width: 700px;
+  width: 70vw;
+}
+
+.adapt-options-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.adapt-instructions-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.adapt-model-field {
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.adapt-text-display {
+  padding: 12px 14px;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  min-height: 60px;
+  max-height: 30vh;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.adapt-text-display.adapt-result {
+  background: var(--soft2);
+  border-color: rgba(37, 99, 235, 0.25);
+  outline: none;
+}
+
+.adapt-text-display.adapt-result:focus {
+  border-color: var(--primary);
+}
+
+.adapt-text-display.adapt-result:empty::before {
+  content: attr(placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* Floating Adapt button - appears when text is selected in translation editor */
+.floating-adapt-btn {
+  position: absolute;
+  display: none;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: #7c3aed;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
+  z-index: 200;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  pointer-events: auto;
+}
+
+.floating-adapt-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.5);
+}
+
+.floating-adapt-btn:active {
+  transform: scale(0.98);
+}
+
+.floating-adapt-btn svg {
+  flex-shrink: 0;
 }
 
 /* ============================================================================

@@ -146,8 +146,16 @@ async def lifespan(app):
     _clear_uploads()
 
 
-def _normalize_whitespace(s: str) -> str:
-    """Collapse all whitespace (including newlines) into single spaces."""
+def _normalize_whitespace(s: str, preserve_paragraphs: bool = False) -> str:
+    """Collapse whitespace into single spaces.
+    
+    If preserve_paragraphs is True, double newlines (paragraph breaks) are preserved.
+    """
+    if preserve_paragraphs:
+        # Split on double newlines (paragraph breaks), normalize each paragraph, rejoin
+        paragraphs = re.split(r'\n\s*\n', s)
+        normalized = [re.sub(r'\s+', ' ', p).strip() for p in paragraphs]
+        return '\n\n'.join(p for p in normalized if p)
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -208,6 +216,22 @@ class TranslateRequest(BaseModel):
 
 class TranslateResponse(BaseModel):
     translation: str
+
+
+class AdaptRequest(BaseModel):
+    selected_text: str = Field(min_length=1)
+    target_language: str = Field(description="Target language for adaptation")
+    additional_instructions: str | None = None
+    api_key: str | None = None
+    api_endpoint: str | None = None
+    temperature: float | None = None
+    model: str | None = None
+    adapt_system_prompt: str | None = None
+    adapt_user_prompt: str | None = None
+
+
+class AdaptResponse(BaseModel):
+    adapted_text: str
 
 
 class ExportRequest(BaseModel):
@@ -295,8 +319,8 @@ async def translate(req: TranslateRequest) -> TranslateResponse:
     model = (req.model or "").strip() or ENV_MODEL
     target = _target_language_label(req.target_language)
     
-    # Normalize the selected text
-    selected = _normalize_whitespace(req.selected_text)
+    # Normalize the selected text (preserve paragraph breaks for multi-passage translations)
+    selected = _normalize_whitespace(req.selected_text, preserve_paragraphs=True)
     if not selected:
         raise HTTPException(status_code=400, detail="No text to translate.")
     
@@ -349,6 +373,71 @@ async def translate(req: TranslateRequest) -> TranslateResponse:
     logger.info(f"TRANSLATE [{target}] Output: {text[:100]}...")
     
     return TranslateResponse(translation=text)
+
+
+@app.post("/api/adapt", response_model=AdaptResponse)
+async def adapt_text(req: AdaptRequest) -> AdaptResponse:
+    """Adapt/naturalize translated text to sound more native in the target language."""
+    api_key = (req.api_key or "").strip() or ENV_API_KEY
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="API key is required. Configure it in Settings or set API_KEY environment variable."
+        )
+
+    api_endpoint = (req.api_endpoint or "").strip() or ENV_API_ENDPOINT
+    model = (req.model or "").strip() or ENV_MODEL
+    target = _target_language_label(req.target_language)
+
+    selected = _normalize_whitespace(req.selected_text, preserve_paragraphs=True)
+    if not selected:
+        raise HTTPException(status_code=400, detail="No text to adapt.")
+
+    # Build system prompt
+    if req.adapt_system_prompt:
+        system = req.adapt_system_prompt.format(target_language=target)
+    else:
+        adapt_system_lines = PROMPTS.get("adapt_system", [
+            "You are a skilled editor for {target_language} text.",
+            "Rewrite the following translated passage so it reads naturally in {target_language}.",
+            "Preserve the original meaning but improve fluency and idiom.",
+            "Output ONLY the adapted text.",
+        ])
+        system = "\n".join(line.format(target_language=target) for line in adapt_system_lines)
+
+    # Build user prompt
+    adapt_user_template = req.adapt_user_prompt if req.adapt_user_prompt else PROMPTS.get("adapt_user_prompt", "=== TEXT TO ADAPT ===\n{text}")
+    user = adapt_user_template.format(text=selected)
+
+    # Append additional instructions if provided
+    extra = (req.additional_instructions or "").strip()
+    if extra:
+        user += f"\n\n=== ADDITIONAL INSTRUCTIONS ===\n{extra}"
+
+    temperature = req.temperature if req.temperature is not None else PROMPTS.get("temperature", 0.1)
+
+    try:
+        client = OpenAI(api_key=api_key, base_url=api_endpoint, timeout=60.0)
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=temperature,
+        )
+    except Exception as e:
+        logger.error(f"Adapt API error: {e}")
+        raise HTTPException(status_code=502, detail=f"Adapt API error: {str(e)}")
+
+    text = (resp.choices[0].message.content or "").strip()
+    if not text:
+        raise HTTPException(status_code=502, detail="Empty adaptation response.")
+
+    logger.info(f"ADAPT [{target}] Input: {selected[:100]}...")
+    logger.info(f"ADAPT [{target}] Output: {text[:100]}...")
+
+    return AdaptResponse(adapted_text=text)
 
 
 @app.post("/api/export")
@@ -476,6 +565,8 @@ def _build_server_defaults_script() -> str:
         "temperature": PROMPTS.get("temperature", 0.1),
         "systemPrompt": "\n".join(PROMPTS["system"]),
         "userPrompt": PROMPTS["user_prompt"],
+        "adaptSystemPrompt": "\n".join(PROMPTS.get("adapt_system", [])),
+        "adaptUserPrompt": PROMPTS.get("adapt_user_prompt", "=== TEXT TO ADAPT ===\n{text}"),
         "hasApiKey": bool(ENV_API_KEY),
         "apiKeyMasked": _mask_api_key(ENV_API_KEY),
     }

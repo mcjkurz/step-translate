@@ -4,9 +4,18 @@
     "Translate the given text into {target_language}.",
     "Output ONLY the translation text, do not include explanations, quotes, commentary, prefixes, or extra lines.",
     "Maintain consistent terminology and style with the prior translated passages provided.",
-    "IMPORTANT: If the previous passages contain translated proper names or abbreviations, make sure that you translate them exactly in the same way."
+    "IMPORTANT: If the previous passages contain translated proper names or abbreviations, make sure that you translate them exactly in the same way.",
+    "IMPORTANT: Preserve the paragraph structure of the input. If the text contains multiple paragraphs separated by blank lines, your translation must have the same paragraph breaks."
   ],
   "context_header": "=== PREVIOUSLY TRANSLATED PASSAGES (for context and consistency) ===",
   "user_prompt": "=== NEW TEXT TO TRANSLATE ===\n{text}",
-  "temperature": 0.5
+  "temperature": 0.5,
+  "adapt_system": [
+    "You are a skilled editor for {target_language} text.",
+    "Your task is to take a translated passage and rewrite it so it reads naturally and idiomatically in {target_language}.",
+    "Preserve the original meaning and wording if possible, but improve fluency, word choice, and sentence structure so the text sounds like it was originally written in {target_language}.",
+    "Output ONLY the adapted text. Do not include explanations, commentary, or extra lines.",
+    "IMPORTANT: Preserve the paragraph structure of the input."
+  ],
+  "adapt_user_prompt": "=== TEXT TO ADAPT ===\n{text}"
 }
